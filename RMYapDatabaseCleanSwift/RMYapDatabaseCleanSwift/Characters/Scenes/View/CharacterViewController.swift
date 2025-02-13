@@ -9,6 +9,8 @@ import UIKit
 import SnapKit
 
 final class CharacterViewController: UIViewController {
+    var interactor: CharacterInteractorProtocol?
+
     private let tableView: UITableView = {
         let tableView = UITableView(frame: .zero, style: .plain)
         tableView.separatorStyle = .none
@@ -45,26 +47,22 @@ final class CharacterViewController: UIViewController {
     }
 
     private func getCharacters() {
-        let savedCharacters = DatabaseManager.shared.loadAllCharacters()
-        if !savedCharacters.isEmpty {
-            self.characters = savedCharacters
-            self.tableView.reloadData()
-        } else {
-            NetworkManager.shared.getCharacters { [weak self] result in
-                switch result {
-                case .success(let characters):
-                    DispatchQueue.main.async {
-                        self?.characters = characters
-                        self?.tableView.reloadData()
-                        characters.forEach { character in
-                            DatabaseManager.shared.saveCharacter(character, key: "\(character.id)")
-                        }
-                    }
-                case .failure(let error):
-                    print("Failed to fetch characters: \(error.localizedDescription)")
-                }
-            }
-        }
+        interactor?.getCharacters(request: CharacterModel.Request())
+    }
+}
+
+// MARK: - CharacterViewProtocol
+extension CharacterViewController: CharacterViewProtocol {
+    func displayCharacters(viewModel: CharacterModel.ViewModel) {
+        self.characters = viewModel.characters
+        tableView.reloadData()
+    }
+
+    func displayError(_ message: String) {
+        let alert = UIAlertController(title: "Error", message: message, preferredStyle: .alert)
+        let okAction = UIAlertAction(title: "OK", style: .default, handler: nil)
+        alert.addAction(okAction)
+        present(alert, animated: true)
     }
 }
 
@@ -82,11 +80,10 @@ extension CharacterViewController: UITableViewDataSource {
         }
 
         let character = characters[indexPath.row]
-        let imageURL = character.image
 
-        NetworkManager.shared.loadImage(from: imageURL) { loadedImage in
+        interactor?.loadImage(for: character) { loadedImage in
             DispatchQueue.main.async {
-                guard let cell = tableView.cellForRow(at: indexPath) as? CharacterTableViewCell  else {
+                guard let cell = tableView.cellForRow(at: indexPath) as? CharacterTableViewCell else {
                     return
                 }
                 cell.configure(with: character, image: loadedImage)
